@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEBULA // Remote PC Control Center</title>
+    <meta name="description" content="NEBULA — Advanced Remote PC Control Center with real-time telemetry, screen capture, terminal and file management.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Animated Background -->
+    <div class="glass-bg"></div>
+
+    <!-- Matrix Rain Canvas -->
+    <canvas id="matrix-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:0.04;"></canvas>
+
+    <div class="app-container">
+
+        <!-- ═══════════════════════ HEADER ═══════════════════════ -->
+        <header class="app-header">
+            <div class="brand">
+                <i data-lucide="terminal" class="glow-icon"></i>
+                <div class="brand-text">
+                    <h1>NEBULA</h1>
+                    <span>// Remote Control System v2.0</span>
+                </div>
+            </div>
+
+            <!-- Center decorative hex codes -->
+            <div style="display:flex;align-items:center;gap:0.6rem;font-size:0.6rem;font-family:'JetBrains Mono',monospace;color:rgba(0,255,65,0.25);letter-spacing:1px;user-select:none;" id="header-hex">
+                <span id="hex-ts">0x00000000</span>
+                <span style="color:rgba(0,255,65,0.1)">│</span>
+                <span id="hex-cpu">CPU:--.--%</span>
+                <span style="color:rgba(0,255,65,0.1)">│</span>
+                <span id="hex-mem">MEM:--.--%</span>
+            </div>
+
+            <div class="header-stats">
+                <div class="stat-pill">
+                    <span class="pill-label">HOST:</span>
+                    <span id="hostname-display" class="pill-value">---</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="pill-label">UPTIME:</span>
+                    <span id="uptime-display" class="pill-value">---</span>
+                </div>
+                <div class="connection-status connected" id="connection-indicator">
+                    <span class="status-dot"></span>
+                    <span id="connection-text">SSE LIVE</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ═══════════════════════ MAIN GRID ═══════════════════════ -->
+        <main class="app-grid">
+
+            <!-- ┌─────────────────────────────────┐ -->
+            <!-- │  LEFT COL — RESOURCE TELEMETRY   │ -->
+            <!-- └─────────────────────────────────┘ -->
+            <section class="grid-card telemetry-card">
+                <div class="card-header">
+                    <h2><i data-lucide="activity"></i>TELEMETRY</h2>
+                    <span class="card-subtitle">REAL-TIME METRICS</span>
+                </div>
+                <div class="card-content">
+                    <div class="chart-container">
+                        <canvas id="cpuMemoryChart"></canvas>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-box cpu-glow">
+                            <span class="box-title">CPU LOAD</span>
+                            <span id="cpu-percent" class="box-value">--%</span>
+                            <div class="mini-bar-bg"><div id="cpu-bar" class="mini-bar" style="width:0%"></div></div>
+                        </div>
+                        <div class="stat-box mem-glow">
+                            <span class="box-title">RAM USAGE</span>
+                            <span id="ram-percent" class="box-value">--%</span>
+                            <div class="mini-bar-bg"><div id="ram-bar" class="mini-bar" style="width:0%"></div></div>
+                            <span id="ram-details" class="box-sub">-- / -- GB</span>
+                        </div>
+                    </div>
+
+                    <!-- Network & Battery -->
+                    <div class="secondary-stats">
+                        <div class="sec-stat-row">
+                            <span class="sec-stat-label"><i data-lucide="arrow-down" class="net-down-icon"></i>RX RATE</span>
+                            <span id="net-download" class="sec-stat-val">0 KB/s</span>
+                        </div>
+                        <div class="sec-stat-row">
+                            <span class="sec-stat-label"><i data-lucide="arrow-up" class="net-up-icon"></i>TX RATE</span>
+                            <span id="net-upload" class="sec-stat-val">0 KB/s</span>
+                        </div>
+                        <div id="battery-row" class="sec-stat-row hide">
+                            <span class="sec-stat-label"><i data-lucide="battery" id="battery-icon"></i>BATTERY</span>
+                            <span id="battery-val" class="sec-stat-val">--%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ┌─────────────────────────────────────────────────┐ -->
+            <!-- │  CENTER COL — CONTROLS + SCREEN + TERMINAL      │ -->
+            <!-- └─────────────────────────────────────────────────┘ -->
+            <div class="center-column">
+
+                <!-- QUICK CONTROLS -->
+                <section class="grid-card controls-card">
+                    <div class="card-header">
+                        <h2><i data-lucide="sliders"></i>SYSTEM CONTROLS</h2>
+                    </div>
+                    <div class="card-content">
+                        <!-- Media & Volume -->
+                        <div class="controls-section">
+                            <h3>Media &amp; Volume</h3>
+                            <div class="btn-group">
+                                <button class="btn ctrl-btn" id="btn-vol-mute" onclick="sendVolume('mute')" title="Mute/Unmute">
+                                    <i data-lucide="volume-x"></i>
+                                </button>
+                                <button class="btn ctrl-btn" id="btn-vol-down" onclick="sendVolume('down')" title="Volume Down">
+                                    <i data-lucide="volume-1"></i>
+                                </button>
+                                <button class="btn ctrl-btn" id="btn-vol-up" onclick="sendVolume('up')" title="Volume Up">
+                                    <i data-lucide="volume-2"></i>
+                                </button>
+                                <button class="btn ctrl-btn media-btn" id="btn-media-prev" onclick="sendVolume('prev')" title="Previous Track">
+                                    <i data-lucide="skip-back"></i>
+                                </button>
+                                <button class="btn ctrl-btn media-btn" id="btn-media-play" onclick="sendVolume('play')" title="Play / Pause">
+                                    <i data-lucide="play-pause"></i>
+                                </button>
+                                <button class="btn ctrl-btn media-btn" id="btn-media-next" onclick="sendVolume('next')" title="Next Track">
+                                    <i data-lucide="skip-forward"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Power Operations -->
+                        <div class="controls-section">
+                            <h3>Power Operations</h3>
+                            <div class="btn-group power-group">
+                                <button class="btn action-btn lock-btn" id="btn-power-lock" onclick="triggerPower('lock')">
+                                    <i data-lucide="lock"></i> Lock PC
+                                </button>
+                                <button class="btn action-btn sleep-btn" id="btn-power-sleep" onclick="triggerPower('sleep')">
+                                    <i data-lucide="moon"></i> Sleep
+                                </button>
+                                <button class="btn action-btn restart-btn" id="btn-power-restart" onclick="confirmPower('restart')">
+                                    <i data-lucide="refresh-cw"></i> Restart
+                                </button>
+                                <button class="btn action-btn shutdown-btn" id="btn-power-shutdown" onclick="confirmPower('shutdown')">
+                                    <i data-lucide="power"></i> Shut Down
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- REMOTE SCREEN VIEW -->
+                <section class="grid-card screen-card">
+                    <div class="card-header">
+                        <h2><i data-lucide="monitor"></i>SCREEN CAPTURE</h2>
+                        <div class="header-actions">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-refresh-screen" onchange="toggleAutoScreen()" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="toggle-label" id="auto-refresh-label">LIVE 10FPS</span>
+                            <button class="btn icon-btn" id="btn-refresh-screen" onclick="refreshScreen()" title="Capture Now">
+                                <i data-lucide="refresh-cw" id="screen-refresh-icon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-content">
+                        <div class="screen-viewer-container">
+                            <div id="screen-loading" class="screen-loader hide">
+                                <div class="spinner"></div>
+                            </div>
+                            <div class="screen-ratio-box">
+                                <img id="desktop-screenshot" src="" alt="Desktop Screenshot" class="screen-image" onclick="handleScreenClick(event)">
+                                <div class="screen-overlay-tip">Click to simulate mouse click on host PC</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CONSOLE TERMINAL -->
+                <section class="grid-card terminal-card">
+                    <div class="card-header">
+                        <h2><i data-lucide="terminal"></i>TERMINAL SHELL</h2>
+                        <button class="btn outline" onclick="clearTerminal()">[ CLEAR ]</button>
+                    </div>
+                    <div class="card-content font-mono">
+                        <div class="terminal-body" id="terminal-output">
+                            <div class="terminal-line system-msg">&gt; NEBULA Shell Environment Initialized.</div>
+                            <div class="terminal-line system-msg">&gt; Running in context of host machine. Type commands below.</div>
+                        </div>
+                        <div class="terminal-input-container">
+                            <span class="terminal-prompt" id="terminal-cwd-prompt">C:\&gt;</span>
+                            <input type="text" id="terminal-command-input" class="terminal-input" placeholder="Enter command..." onkeydown="handleTerminalKey(event)">
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- ┌──────────────────────────────────┐ -->
+            <!-- │  RIGHT COL — TABBED PANEL        │ -->
+            <!-- └──────────────────────────────────┘ -->
+            <section class="grid-card main-tabs-card">
+                <div class="card-tabs-header">
+                    <button class="tab-btn active" id="tab-files-btn" onclick="switchTab('files')">
+                        <i data-lucide="folder"></i>FILES
+                    </button>
+                    <button class="tab-btn" id="tab-processes-btn" onclick="switchTab('processes')">
+                        <i data-lucide="cpu"></i>PROCS
+                    </button>
+                    <button class="tab-btn" id="tab-av-btn" onclick="switchTab('av')">
+                        <i data-lucide="video"></i>CAM
+                    </button>
+                    <button class="tab-btn" id="tab-pass-btn" onclick="switchTab('pass')">
+                        <i data-lucide="key"></i>PASSWORDS
+                    </button>
+                </div>
+
+                <div class="card-content tabs-content">
+
+                    <!-- FILE MANAGER TAB -->
+                    <div class="tab-panel active" id="tab-files">
+                        <!-- Path bar -->
+                        <div class="file-explorer-header">
+                            <div class="drives-selector-wrapper">
+                                <select id="drives-dropdown" onchange="onDriveSelected(this.value)">
+                                    <option value="">Drives</option>
+                                </select>
+                            </div>
+                            <div class="breadcrumbs" id="file-breadcrumbs">
+                                <span class="breadcrumb-item" onclick="goHome()">MY_PC</span>
+                            </div>
+                        </div>
+
+                        <!-- Actions bar -->
+                        <div class="file-actions-bar">
+                            <button class="btn btn-sm" onclick="promptCreate('dir')" title="New Folder">
+                                <i data-lucide="folder-plus"></i> MKDIR
+                            </button>
+                            <button class="btn btn-sm" onclick="promptCreate('file')" title="New File">
+                                <i data-lucide="file-plus"></i> TOUCH
+                            </button>
+                            <label class="btn btn-sm btn-upload-label" title="Upload Files">
+                                <i data-lucide="upload"></i> PUT
+                                <input type="file" id="file-upload-input" multiple style="display:none;" onchange="handleFileUpload()">
+                            </label>
+                            <div class="selection-actions hide" id="selection-actions-bar">
+                                <button class="btn btn-sm download-btn" onclick="downloadSelected()" title="Download as ZIP">
+                                    <i data-lucide="download"></i> GET
+                                </button>
+                                <button class="btn btn-sm danger-btn" onclick="deleteSelected()" title="Delete selected">
+                                    <i data-lucide="trash-2"></i> RM
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Files Table -->
+                        <div class="files-list-container">
+                            <table class="files-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:36px;"><input type="checkbox" id="select-all-files" onchange="toggleSelectAllFiles(this.checked)"></th>
+                                        <th>NAME</th>
+                                        <th style="width:90px;text-align:right;">SIZE</th>
+                                        <th style="width:140px;text-align:right;">MODIFIED</th>
+                                        <th style="width:55px;text-align:center;">ACT</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="files-table-body">
+                                    <tr>
+                                        <td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.72rem;">
+                                            <i data-lucide="folder-open" style="width:28px;height:28px;margin-bottom:0.5rem;opacity:0.3;display:block;margin-left:auto;margin-right:auto;"></i>
+                                            &gt; SELECT A DRIVE TO BROWSE...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- PROCESS MANAGER TAB -->
+                    <div class="tab-panel" id="tab-processes">
+                        <div class="proc-header-bar">
+                            <div class="search-box">
+                                <i data-lucide="search"></i>
+                                <input type="text" id="proc-search-input" placeholder="Search processes..." oninput="filterProcesses()">
+                            </div>
+                            <button class="btn btn-sm icon-btn" onclick="refreshProcesses()" title="Refresh">
+                                <i data-lucide="refresh-cw" id="proc-refresh-icon"></i>
+                            </button>
+                        </div>
+                        <div class="processes-list-container">
+                            <table class="proc-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:70px;">PID</th>
+                                        <th>PROCESS</th>
+                                        <th style="width:80px;text-align:right;">CPU%</th>
+                                        <th style="width:80px;text-align:right;">RAM%</th>
+                                        <th style="width:55px;text-align:center;">KILL</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="processes-table-body">
+                                    <tr>
+                                        <td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.72rem;">LOADING PROCESSES...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- PASSWORD MANAGER TAB -->
+                    <div class="tab-panel" id="tab-pass">
+                        <div class="proc-header-bar">
+                            <div class="search-box">
+                                <i data-lucide="search"></i>
+                                <input type="text" id="pass-search-input" placeholder="Search passwords..." oninput="filterPasswords()">
+                            </div>
+                            <button class="btn btn-sm icon-btn" onclick="extractPasswords()" title="Extract / Refresh Passwords">
+                                <i data-lucide="refresh-cw" id="pass-refresh-icon"></i>
+                            </button>
+                        </div>
+                        <div class="processes-list-container">
+                            <table class="proc-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width:80px;">BROWSER</th>
+                                        <th>URL</th>
+                                        <th>USER</th>
+                                        <th>PASS</th>
+                                        <th style="width:140px;text-align:right;">DATE</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="passwords-table-body">
+                                    <tr>
+                                        <td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem;font-size:0.72rem;">
+                                            <i data-lucide="key" style="width:28px;height:28px;margin-bottom:0.5rem;opacity:0.3;display:block;margin-left:auto;margin-right:auto;"></i>
+                                            &gt; CLICK THE REFRESH BUTTON TO EXTRACT PASSWORDS...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- AV SANDBOX / CAMERA TAB -->
+                    <div class="tab-panel" id="tab-av" style="overflow-y:auto;padding-right:4px;">
+                        <div class="av-sandbox-grid" style="display:flex;flex-direction:column;gap:12px;">
+                            <!-- Camera Viewport -->
+                            <div class="av-panel main-panel" style="display:flex;flex-direction:column;gap:10px;">
+                                <div class="media-viewport" style="width:100%;aspect-ratio:16/10;background:#000;border-radius:8px;overflow:hidden;position:relative;border:1px solid var(--card-border);box-shadow:0 0 20px rgba(0,255,65,0.06);">
+                                    <!-- Python MJPEG Camera Stream -->
+                                    <div id="backend-view" class="view-content active" style="width:100%;height:100%;position:relative;display:block;">
+                                        <!-- Camera Idle Placeholder -->
+                                        <div id="camera-placeholder" style="position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:2;">
+                                            <i data-lucide="video-off" style="width:36px;height:36px;color:var(--text-muted);margin-bottom:12px;opacity:0.6;"></i>
+                                            <span style="font-weight:700;font-size:0.8rem;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;">CAMERA IDLE</span>
+                                            <span style="font-size:0.65rem;color:var(--text-muted);margin-top:6px;max-width:260px;line-height:1.4;">Webcam is offline. Click "Capture Snapshot" below to take a photo.</span>
+                                        </div>
+                                        <img id="backend-video" src="" alt="Python Stream" style="width:100%;height:100%;object-fit:cover;display:none;position:relative;z-index:1;" />
+                                        <div class="viewport-overlay" style="position:absolute;bottom:8px;left:8px;pointer-events:none;z-index:5;">
+                                            <span id="camera-badge" class="badge-overlay py-badge" style="background:rgba(0,5,2,0.85);backdrop-filter:blur(4px);padding:3px 8px;border-radius:4px;font-size:0.65rem;border:1px solid rgba(0,255,65,0.2);color:var(--glow-green);letter-spacing:1px;font-family:'JetBrains Mono',monospace;">▶ OPENCV SNAPSHOT</span>
+                                        </div>
+                                        <!-- Corner decorations -->
+                                        <div style="position:absolute;top:6px;left:6px;width:16px;height:16px;border-top:2px solid rgba(0,255,65,0.5);border-left:2px solid rgba(0,255,65,0.5);pointer-events:none;"></div>
+                                        <div style="position:absolute;top:6px;right:6px;width:16px;height:16px;border-top:2px solid rgba(0,255,65,0.5);border-right:2px solid rgba(0,255,65,0.5);pointer-events:none;"></div>
+                                        <div style="position:absolute;bottom:6px;left:6px;width:16px;height:16px;border-bottom:2px solid rgba(0,255,65,0.5);border-left:2px solid rgba(0,255,65,0.5);pointer-events:none;"></div>
+                                        <div style="position:absolute;bottom:6px;right:6px;width:16px;height:16px;border-bottom:2px solid rgba(0,255,65,0.5);border-right:2px solid rgba(0,255,65,0.5);pointer-events:none;"></div>
+                                    </div>
+
+                                    <!-- Error Overlay -->
+                                    <div id="media-error-box" class="error-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(2,10,4,0.95);display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;z-index:10;">
+                                        <span style="font-size:2rem;margin-bottom:8px;">⚠</span>
+                                        <h3 style="margin-bottom:6px;font-size:0.85rem;color:var(--glow-red);letter-spacing:2px;text-shadow:0 0 8px rgba(255,45,85,0.4);">CAM SIGNAL LOST</h3>
+                                        <p id="error-message" style="font-size:0.72rem;color:var(--text-muted);margin-bottom:12px;max-width:280px;line-height:1.5;">Camera device unavailable or permissions denied.</p>
+                                        <button class="btn btn-sm" onclick="requestMediaPermissions()" style="padding:5px 12px;font-size:0.7rem;">RETRY</button>
+                                    </div>
+                                </div>
+
+                                <!-- Camera Controls -->
+                                <div style="background:rgba(0,255,65,0.02);border:1px solid var(--card-border);padding:12px;border-radius:6px;display:flex;flex-direction:column;gap:10px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                                        <span style="font-weight:700;font-size:0.72rem;color:var(--glow-green);letter-spacing:2px;text-transform:uppercase;">Camera Actions</span>
+                                        <div style="display:flex;align-items:center;gap:6px;">
+                                            <span style="font-size:0.68rem;color:var(--text-muted);letter-spacing:0.5px;" id="stream-toggle-label">LIVE STREAM</span>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" id="camera-stream-toggle" onchange="toggleCameraStream()">
+                                                <span class="slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <p style="font-size:0.65rem;color:var(--text-muted);line-height:1.4;">Enable live video stream, or capture a single high-quality snapshot frame.</p>
+                                    <button class="btn" id="btn-capture-snapshot" onclick="captureCameraSnapshot()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:8px;background:rgba(0,255,65,0.1);border:1px solid var(--glow-green);color:#fff;font-weight:bold;cursor:pointer;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;">
+                                        <i data-lucide="camera" style="width:16px;height:16px;"></i> CAPTURE SNAPSHOT
+                                    </button>
+                                </div>
+
+                                <!-- Camera Settings -->
+                                <div style="background:rgba(0,255,65,0.02);border:1px solid var(--card-border);padding:10px;border-radius:6px;">
+                                    <div style="font-weight:700;font-size:0.72rem;margin-bottom:4px;color:var(--glow-green);letter-spacing:2px;text-transform:uppercase;">Camera Index</div>
+                                    <p style="font-size:0.65rem;color:var(--text-muted);margin-bottom:6px;line-height:1.4;">Switch between connected camera devices by index.</p>
+                                    <select id="python-camera-select" onchange="changePythonCamera(this.value)" style="background:#000;border:1px solid var(--card-border);color:var(--text-main);font-size:0.72rem;padding:5px 8px;border-radius:4px;width:100%;outline:none;cursor:pointer;font-family:'JetBrains Mono',monospace;">
+                                        <option value="0">Camera 0 — Primary</option>
+                                        <option value="1">Camera 1 — Secondary</option>
+                                        <option value="2">Camera 2 — Tertiary</option>
+                                        <option value="3">Camera 3</option>
+                                    </select>
+                                </div>
+
+                                <!-- Diagnostics -->
+                                <div style="background:rgba(0,255,65,0.02);border:1px solid var(--card-border);padding:10px;border-radius:6px;font-size:0.72rem;">
+                                    <div style="font-weight:700;font-size:0.72rem;margin-bottom:8px;color:var(--glow-green);letter-spacing:2px;text-transform:uppercase;">AV Diagnostics</div>
+                                    <div style="display:flex;justify-content:space-between;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid var(--card-border);">
+                                        <span style="color:var(--text-muted);letter-spacing:0.5px;">Stream Resolution</span>
+                                        <span id="diag-resolution" style="font-family:'JetBrains Mono',monospace;color:var(--glow-green);">640×480</span>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;">
+                                        <span style="color:var(--text-muted);letter-spacing:0.5px;">OpenCV Camera</span>
+                                        <span id="diag-python-cam" style="font-family:'JetBrains Mono',monospace;color:var(--glow-green);">Checking...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Power Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay hide">
+        <div class="modal-card">
+            <h3><i data-lucide="alert-triangle" class="danger-icon"></i>POWER OPERATION</h3>
+            <p id="confirm-modal-text">Are you sure you want to perform this action on the host machine?</p>
+            <div class="modal-buttons">
+                <button class="btn cancel" onclick="closeConfirmModal()">CANCEL</button>
+                <button class="btn danger" id="confirm-modal-btn">EXECUTE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Matrix Rain Script -->
+    <script>
+    (function(){
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        let W, H, cols, drops;
+        const chars = '01アイウエオカキクケコ▓▒░█◆◇NEBULA><{}[]';
+
+        function resize(){
+            W = canvas.width = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+            cols = Math.floor(W / 18);
+            drops = Array(cols).fill(1);
+        }
+
+        function draw(){
+            ctx.fillStyle = 'rgba(2, 11, 4, 0.05)';
+            ctx.fillRect(0, 0, W, H);
+            ctx.fillStyle = '#00ff41';
+            ctx.font = '13px JetBrains Mono, monospace';
+            for(let i = 0; i < drops.length; i++){
+                const c = chars[Math.floor(Math.random() * chars.length)];
+                ctx.fillStyle = Math.random() > 0.97 ? '#ffffff' : '#00ff41';
+                ctx.globalAlpha = Math.random() * 0.6 + 0.2;
+                ctx.fillText(c, i * 18, drops[i] * 18);
+                if(drops[i] * 18 > H && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+        setInterval(draw, 50);
+    })();
+    </script>
+
+    <!-- Header hex timestamp updater -->
+    <script>
+    (function(){
+        function updateHex(){
+            const ts = Date.now();
+            const el = document.getElementById('hex-ts');
+            if(el) el.textContent = '0x' + ts.toString(16).toUpperCase().slice(-8);
+        }
+        setInterval(updateHex, 500);
+        updateHex();
+    })();
+    </script>
+
+    <script src="app.js"></script>
+</body>
+</html>
